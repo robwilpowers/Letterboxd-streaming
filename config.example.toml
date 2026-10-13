@@ -12,9 +12,9 @@ tmdb_api_key = ""
 # Ranking: free services first, then subscriptions, then pay-per-view (rent, then buy).
 
 # Free tier. Only these count as free. Leaving this out uses this same default list.
-free_services = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]
+free_services = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel", "Kanopy"]
 
-# TMDB sometimes labels other services free (YouTube's free movies, Crackle, Kanopy...).
+# TMDB sometimes labels other services free (YouTube's free movies, Crackle, Hoopla...).
 # false = leave them out of the results; true = count them as free too.
 count_other_free = false
 

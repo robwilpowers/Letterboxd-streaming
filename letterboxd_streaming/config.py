@@ -39,7 +39,7 @@ DEFAULT_PRICES = {
 }
 
 # The services that count as free. Only these rank in the free tier; see count_other_free.
-DEFAULT_FREE = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]
+DEFAULT_FREE = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel", "Kanopy"]
 
 _SUFFIXES = re.compile(
     r"\s+(amazon channel|apple tv channel|roku premium channel|via prime video|"
@@ -97,7 +97,7 @@ class Prefs:
     free_services: set[str] = field(default_factory=lambda: {canonical_provider(s) for s in DEFAULT_FREE})
     prices: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_PRICES))
     unknown_subscription_price: float = 9.99
-    # TMDB sometimes marks other services free (YouTube's free movies, Crackle, Kanopy...).
+    # TMDB sometimes marks other services free (YouTube's free movies, Crackle, Hoopla...).
     # False: ignore those and only count free_services as free. True: count them as free too.
     count_other_free: bool = False
     # How long after a theatrical release a film still counts as "in theaters".

@@ -93,7 +93,7 @@ class Ranking(unittest.TestCase):
 
     def test_default_free_services(self):
         prefs = Prefs()
-        for name in ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]:
+        for name in ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel", "Kanopy"]:
             offers = analyze.build_offers({"ads": [prov(name)]}, prefs)
             self.assertEqual(offers[0].tier, analyze.FREE, name)
 
@@ -119,13 +119,17 @@ class Ranking(unittest.TestCase):
         self.assertEqual(got, [("Max", "flatrate")])
 
     def test_other_free_services_ignored_by_default(self):
-        providers = {"free": [prov("Kanopy"), prov("YouTube Free")], "flatrate": [prov("Netflix")]}
+        providers = {"free": [prov("Crackle"), prov("YouTube Free")], "flatrate": [prov("Netflix")]}
         self.assertEqual(self.rank(providers), [("Netflix", "flatrate")])
         self.assertEqual(self.rank(providers, Prefs(count_other_free=True))[0][1], "free")
 
     def test_ad_tier_of_paid_service_is_a_subscription(self):
         offers = analyze.build_offers({"ads": [prov("Amazon Prime Video with Ads")]}, Prefs())
         self.assertEqual((offers[0].tier, offers[0].key), (analyze.SUBSCRIPTION, "amazon prime video"))
+
+    def test_kanopy_listed_as_flatrate_is_free(self):
+        offers = analyze.build_offers({"flatrate": [prov("Netflix"), prov("Kanopy")]}, Prefs())
+        self.assertEqual((offers[0].provider, offers[0].tier), ("Kanopy", analyze.FREE))
 
     def test_free_service_listed_as_flatrate_still_free(self):
         offers = analyze.build_offers({"flatrate": [prov("Netflix"), prov("Pluto TV")]}, Prefs())

@@ -54,14 +54,14 @@ If you prefer, `pip install .` installs it as a `letterboxd-streaming` command.
 
 | Tier | Services | Order within the tier |
 |---|---|---|
-| 1. Free | Tubi, Pluto TV, Plex, The Roku Channel (`free_services`) | JustWatch's display order |
+| 1. Free | Tubi, Pluto TV, Plex, The Roku Channel, Kanopy (`free_services`) | JustWatch's display order |
 | 2. Subscription | Netflix, HBO Max, Paramount+, Hulu, Disney+, MUBI, Criterion Channel, Prime Video, etc. | services in `my_services` first, then cheapest monthly price |
 | 3. Rent (pay per view) | Apple TV, Amazon Video, Google Play Movies, etc. | JustWatch's display order |
 | 4. Buy | same stores | shown only when there's nothing else |
 
 The best option is listed first and the others appear under "also". The **Subscriptions worth considering** section counts how many watchlist films each service you don't have would unlock that you can't already watch free or on a service you pay for.
 
-TMDB sometimes marks other services as free (YouTube's free movies, Crackle, Kanopy). By default they're left out because they aren't in your free list. Set `count_other_free = true` to count them. Ad-supported tiers of paid services ("Amazon Prime Video with Ads") count as that subscription, not as free.
+TMDB sometimes marks other services as free (YouTube's free movies, Crackle, Hoopla). By default they're left out because they aren't in your free list. Set `count_other_free = true` to count them. Ad-supported tiers of paid services ("Amazon Prime Video with Ads") count as that subscription, not as free.
 
 Variants of the same service are merged ("Max", "HBO Max", "Max Amazon Channel"; "Netflix Standard with Ads").
 
