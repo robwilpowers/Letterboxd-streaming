@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+config.toml
+*.html
+*.json
+!tests/fixtures/*.json

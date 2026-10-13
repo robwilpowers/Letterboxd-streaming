@@ -1,0 +1,34 @@
+# Copy to config.toml and edit. config.toml is git-ignored so your API key stays local.
+
+letterboxd_user = "your-letterboxd-username"
+
+# Two-letter country code. Streaming catalogs differ a lot by country.
+region = "US"
+
+# Free TMDB key: https://www.themoviedb.org/settings/api
+# (or set the TMDB_API_KEY / TMDB_READ_TOKEN environment variable instead)
+tmdb_api_key = ""
+
+# Services you already pay for. These count as $0 for ranking.
+# Names are matched loosely ("Max", "HBO Max", "Max Amazon Channel" are the same).
+my_services = ["Netflix", "Amazon Prime Video"]
+
+# Services that cost you nothing. Kanopy/Hoopla need a library card -- remove them if you don't have one.
+# Leaving this out uses the built-in list.
+# free_services = ["Tubi TV", "Pluto TV", "The Roku Channel", "Plex", "Kanopy", "Hoopla"]
+
+# Rough costs used to rank paid options. TMDB doesn't provide real rental prices.
+rental_estimate = 4.99
+purchase_estimate = 14.99
+unknown_subscription_price = 9.99
+
+# A film released in theaters this many days ago with no home release counts as "in theaters".
+theatrical_window_days = 120
+
+# How long cached availability is reused before re-checking (hours).
+ttl_hours = 12
+
+# Override monthly prices (USD). Defaults are approximate and will drift.
+[prices]
+# "Peacock" = 7.99
+# "Criterion Channel" = 10.99

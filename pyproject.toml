@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "letterboxd-streaming"
+version = "0.1.0"
+description = "Find where to stream the films on your Letterboxd watchlist, cheapest option first."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+letterboxd-streaming = "letterboxd_streaming.cli:main"
+
+[tool.setuptools]
+packages = ["letterboxd_streaming"]
