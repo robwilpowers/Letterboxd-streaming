@@ -79,41 +79,57 @@ class ProviderNames(unittest.TestCase):
         self.assertEqual(canonical_provider("The Roku Channel"), "the roku channel")
         self.assertEqual(canonical_provider("The Criterion Channel"), "criterion channel")
         self.assertEqual(canonical_provider("Apple TV+"), "apple tv plus")
+        self.assertEqual(canonical_provider("Criterion Collection"), "criterion channel")
+        self.assertEqual(canonical_provider("HBOMax"), "hbo max")
+        self.assertEqual(canonical_provider("Pluto"), "pluto tv")
 
 
 class Ranking(unittest.TestCase):
     def setUp(self):
         self.prefs = Prefs(my_services={"hbo max"})
 
-    def rank(self, providers):
-        return [(o.provider, o.kind) for o in analyze.build_offers(providers, self.prefs)]
+    def rank(self, providers, prefs=None):
+        return [(o.provider, o.kind) for o in analyze.build_offers(providers, prefs or self.prefs)]
 
-    def test_free_beats_everything(self):
-        got = self.rank({"flatrate": [prov("Max"), prov("Peacock")], "ads": [prov("Tubi TV", 20)],
-                         "rent": [prov("Apple TV")]})
-        self.assertEqual(got[0], ("Tubi TV", "ads"))
-        self.assertEqual(got[1], ("Max", "flatrate"))  # already subscribed => $0
+    def test_default_free_services(self):
+        prefs = Prefs()
+        for name in ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]:
+            offers = analyze.build_offers({"ads": [prov(name)]}, prefs)
+            self.assertEqual(offers[0].tier, analyze.FREE, name)
 
-    def test_owned_subscription_beats_unowned(self):
-        got = self.rank({"flatrate": [prov("Peacock", 1), prov("Max Amazon Channel", 5), prov("Max", 9)]})
-        self.assertEqual([p for p, _ in got], ["Max Amazon Channel", "Peacock"])  # Max variants deduped
+    def test_tiers_free_then_subscription_then_rent_then_buy(self):
+        got = self.rank({"buy": [prov("Apple TV")], "rent": [prov("Google Play Movies")],
+                         "flatrate": [prov("MUBI")], "ads": [prov("Tubi TV", 20)]})
+        self.assertEqual(got, [("Tubi TV", "ads"), ("MUBI", "flatrate"), ("Google Play Movies", "rent"), ("Apple TV", "buy")])
+
+    def test_subscription_beats_rental_even_when_not_subscribed(self):
+        got = self.rank({"flatrate": [prov("MUBI")], "rent": [prov("Amazon Video")]})
+        self.assertEqual(got[0], ("MUBI", "flatrate"))
+
+    def test_owned_subscription_beats_unowned_and_cheaper(self):
+        got = self.rank({"flatrate": [prov("Paramount Plus", 1), prov("Max Amazon Channel", 5), prov("Max", 9)]})
+        self.assertEqual([p for p, _ in got], ["Max Amazon Channel", "Paramount Plus"])  # Max variants deduped
+
+    def test_unowned_subscriptions_cheapest_first(self):
+        got = self.rank({"flatrate": [prov("MUBI", 1), prov("Netflix", 2)]})
+        self.assertEqual([p for p, _ in got], ["Netflix", "MUBI"])
 
     def test_zero_display_priority_is_respected(self):
         got = self.rank({"flatrate": [prov("Max Amazon Channel", 3), prov("Max", 0)]})
         self.assertEqual(got, [("Max", "flatrate")])
 
-    def test_cheap_rental_vs_pricey_subscription(self):
-        got = self.rank({"flatrate": [prov("MUBI")], "rent": [prov("Amazon Video")]})
-        self.assertEqual(got[0], ("Amazon Video", "rent"))  # $4.99 rental < $14.99/mo MUBI for one film
+    def test_other_free_services_ignored_by_default(self):
+        providers = {"free": [prov("Kanopy"), prov("YouTube Free")], "flatrate": [prov("Netflix")]}
+        self.assertEqual(self.rank(providers), [("Netflix", "flatrate")])
+        self.assertEqual(self.rank(providers, Prefs(count_other_free=True))[0][1], "free")
 
-    def test_cheap_subscription_vs_rental(self):
-        self.prefs.prices["fandor"] = 3.99
-        got = self.rank({"flatrate": [prov("Fandor")], "rent": [prov("Amazon Video")]})
-        self.assertEqual(got[0], ("Fandor", "flatrate"))
+    def test_ad_tier_of_paid_service_is_a_subscription(self):
+        offers = analyze.build_offers({"ads": [prov("Amazon Prime Video with Ads")]}, Prefs())
+        self.assertEqual((offers[0].tier, offers[0].key), (analyze.SUBSCRIPTION, "amazon prime video"))
 
-    def test_library_service_listed_as_flatrate_is_free(self):
-        got = analyze.build_offers({"flatrate": [prov("Kanopy"), prov("Netflix")]}, Prefs())
-        self.assertEqual((got[0].provider, got[0].cost), ("Kanopy", 0))
+    def test_free_service_listed_as_flatrate_still_free(self):
+        offers = analyze.build_offers({"flatrate": [prov("Netflix"), prov("Pluto TV")]}, Prefs())
+        self.assertEqual((offers[0].provider, offers[0].tier), ("Pluto TV", analyze.FREE))
 
     def test_apple_tv_flatrate_matches_apple_tv_plus_subscription(self):
         prefs = Prefs(my_services={canonical_provider("Apple TV+")})
@@ -212,7 +228,7 @@ class EndToEnd(unittest.TestCase):
 
             payload["d"] = details({"flatrate": [prov("Max")], "rent": [prov("Apple TV")]}, us(("2024-03-01", 3)))
             second = check_film(film, tmdb, cache, prefs, refresh=True, use_letterboxd_pages=False)
-            self.assertEqual(second.best.kind, "rent")  # Netflix gone; Max costs more than a rental
+            self.assertEqual(second.best.provider, "Max")  # Netflix gone; any subscription beats renting
             self.assertEqual(second.changes, ["Now streaming on Max", "Left Netflix"])
 
             text = report.render_text([second], prefs)

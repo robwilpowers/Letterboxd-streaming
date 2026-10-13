@@ -38,12 +38,8 @@ DEFAULT_PRICES = {
     "sundance now": 8.99,
 }
 
-# Services that cost nothing. TMDB usually labels these "free"/"ads", but not always.
-# Kanopy and Hoopla are free with a library card -- add them if you have one.
-DEFAULT_FREE = [
-    "tubi tv", "pluto tv", "the roku channel", "plex", "crackle", "youtube free",
-    "freevee", "fawesome", "kanopy", "hoopla",
-]
+# The services that count as free. Only these rank in the free tier; see count_other_free.
+DEFAULT_FREE = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]
 
 _SUFFIXES = re.compile(
     r"\s+(amazon channel|apple tv channel|roku premium channel|via prime video|"
@@ -66,6 +62,15 @@ _ALIASES = {
     "tubi": "tubi tv",
     "roku channel": "the roku channel",
     "the criterion channel": "criterion channel",
+    "criterion collection": "criterion channel",
+    "the criterion collection": "criterion channel",
+    "hbomax": "hbo max",
+    "pluto": "pluto tv",
+    "plex channel": "plex",
+    "plex player": "plex",
+    "roku": "the roku channel",
+    "google play": "google play movies",
+    "google tv": "google play movies",
     "fubo": "fubotv",
     "kanopy": "kanopy",
     "hoopla": "hoopla",
@@ -92,8 +97,9 @@ class Prefs:
     free_services: set[str] = field(default_factory=lambda: {canonical_provider(s) for s in DEFAULT_FREE})
     prices: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_PRICES))
     unknown_subscription_price: float = 9.99
-    rental_estimate: float = 4.99
-    purchase_estimate: float = 14.99
+    # TMDB sometimes marks other services free (YouTube's free movies, Crackle, Kanopy...).
+    # False: ignore those and only count free_services as free. True: count them as free too.
+    count_other_free: bool = False
     # How long after a theatrical release a film still counts as "in theaters".
     theatrical_window_days: int = 120
     ttl_hours: float = 12
@@ -119,7 +125,9 @@ def load(path: str | None) -> Prefs:
         prefs.free_services = {canonical_provider(s) for s in data["free_services"]}
     for name, price in (data.get("prices") or {}).items():
         prefs.prices[canonical_provider(name)] = float(price)
-    for attr in ("unknown_subscription_price", "rental_estimate", "purchase_estimate", "ttl_hours"):
+    if "count_other_free" in data:
+        prefs.count_other_free = bool(data["count_other_free"])
+    for attr in ("unknown_subscription_price", "ttl_hours"):
         if attr in data:
             setattr(prefs, attr, float(data[attr]))
     if "theatrical_window_days" in data:

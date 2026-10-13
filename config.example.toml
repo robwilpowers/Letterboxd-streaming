@@ -9,17 +9,21 @@ region = "US"
 # (or set the TMDB_API_KEY / TMDB_READ_TOKEN environment variable instead)
 tmdb_api_key = ""
 
-# Services you already pay for. These count as $0 for ranking.
+# Ranking: free services first, then subscriptions, then pay-per-view (rent, then buy).
+
+# Free tier. Only these count as free. Leaving this out uses this same default list.
+free_services = ["Tubi TV", "Pluto TV", "Plex", "The Roku Channel"]
+
+# TMDB sometimes labels other services free (YouTube's free movies, Crackle, Kanopy...).
+# false = leave them out of the results; true = count them as free too.
+count_other_free = false
+
+# Subscriptions you already pay for. Within the subscription tier these come first;
+# other subscriptions follow, cheapest first (prices below).
 # Names are matched loosely ("Max", "HBO Max", "Max Amazon Channel" are the same).
 my_services = ["Netflix", "Amazon Prime Video"]
 
-# Services that cost you nothing. Kanopy/Hoopla need a library card -- remove them if you don't have one.
-# Leaving this out uses the built-in list.
-# free_services = ["Tubi TV", "Pluto TV", "The Roku Channel", "Plex", "Kanopy", "Hoopla"]
-
-# Rough costs used to rank paid options. TMDB doesn't provide real rental prices.
-rental_estimate = 4.99
-purchase_estimate = 14.99
+# Used to order subscriptions you don't have when no price is known.
 unknown_subscription_price = 9.99
 
 # A film released in theaters this many days ago with no home release counts as "in theaters".

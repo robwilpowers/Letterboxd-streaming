@@ -13,9 +13,9 @@ WATCH FREE (1)
 ON YOUR SERVICES (1)
   Old Thing (2019) -> Netflix [Your subscription]
 
-CHEAPEST TO RENT OR BUY (1)
+PAY PER VIEW (RENT OR BUY) (1)
   Dune: Part Two (2024) -> Apple TV [Rent]
-      also: Amazon Video (rent), Max (subscription ~$10.99/mo)
+      also: Amazon Video (rent)
 
 IN THEATERS (1)
   New Thing (2026) - In theaters since 2026-09-26; streaming date not announced
@@ -50,17 +50,18 @@ If you prefer, `pip install .` installs it as a `letterboxd-streaming` command.
 
 ## How it decides
 
-**Where to watch:** availability comes from TMDB's watch-provider data, which is supplied by JustWatch. Every option is given an estimated cost for watching *this one film*:
+**Where to watch:** availability comes from TMDB's watch-provider data, which is supplied by JustWatch. Options are ranked strictly by tier, so a lower tier never beats a higher one:
 
-| Option | Cost used for ranking |
-|---|---|
-| Free / free with ads (Tubi, Pluto, Roku Channel, Kanopy, Hoopla…) | $0 |
-| A subscription listed in `my_services` | $0 (you already pay for it) |
-| A subscription you don't have | its monthly price (editable in `[prices]`) |
-| Rent | `rental_estimate` (default $4.99) |
-| Buy | `purchase_estimate` (default $14.99) |
+| Tier | Services | Order within the tier |
+|---|---|---|
+| 1. Free | Tubi, Pluto TV, Plex, The Roku Channel (`free_services`) | JustWatch's display order |
+| 2. Subscription | Netflix, HBO Max, Paramount+, Hulu, Disney+, MUBI, Criterion Channel, Prime Video, etc. | services in `my_services` first, then cheapest monthly price |
+| 3. Rent (pay per view) | Apple TV, Amazon Video, Google Play Movies, etc. | JustWatch's display order |
+| 4. Buy | same stores | shown only when there's nothing else |
 
-The cheapest option is listed first and the others appear under "also". This means a $4.99 rental can rank above a $14.99/mo MUBI subscription for a single film. To balance that, the **Subscriptions worth considering** section counts how many watchlist films each service you don't have would unlock, which shows when a month of a service is the better deal.
+The best option is listed first and the others appear under "also". The **Subscriptions worth considering** section counts how many watchlist films each service you don't have would unlock that you can't already watch free or on a service you pay for.
+
+TMDB sometimes marks other services as free (YouTube's free movies, Crackle, Kanopy). By default they're left out because they aren't in your free list. Set `count_other_free = true` to count them. Ad-supported tiers of paid services ("Amazon Prime Video with Ads") count as that subscription, not as free.
 
 Variants of the same service are merged ("Max", "HBO Max", "Max Amazon Channel"; "Netflix Standard with Ads").
 
@@ -82,7 +83,7 @@ Use `--refresh` to skip the cache.
 
 ## Limitations
 
-* **Prices are estimates.** TMDB doesn't publish rental or purchase prices, and subscription prices change often. Check `DEFAULT_PRICES` in `letterboxd_streaming/config.py` and override them in `config.toml`. New-release premium rentals ($19.99+) are ranked as if they cost `rental_estimate`.
+* **Subscription prices are estimates.** They only order subscriptions you don't have, and they change often. Check `DEFAULT_PRICES` in `letterboxd_streaming/config.py` and override them in `config.toml`. TMDB doesn't publish rental prices, so rentals aren't priced.
 * **No "leaving soon" dates.** The data shows where a film is today, not when it leaves. The change log only catches a move after it happens.
 * **Data lag.** JustWatch/TMDB data can trail real catalog changes by a day or two. The "All options" link in the HTML report opens the TMDB/JustWatch page so you can check.
 * **Scraper fragility.** If Letterboxd changes its page markup, `--user` may return nothing. `--csv` will still work.

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from .config import Prefs, canonical_provider
 from .models import Film, Offer, Result, Status
 
-KIND_RANK = {"free": 0, "ads": 0, "flatrate": 1, "rent": 2, "buy": 3}
+FREE, SUBSCRIPTION, RENT, BUY = 0, 1, 2, 3
 KIND_LABEL = {"free": "Free", "ads": "Free with ads", "flatrate": "Subscription", "rent": "Rent", "buy": "Buy"}
 
 # TMDB release_dates types
@@ -16,47 +16,51 @@ PREPRODUCTION_STATUSES = {"Rumored", "Planned", "In Production", "Post Productio
 
 
 def build_offers(region_providers: dict, prefs: Prefs) -> list[Offer]:
-    """All ways to watch in the region, sorted cheapest first.
+    """All ways to watch in the region, best first.
 
-    Cost model (marginal cost of watching this one film):
-      free / ads / a service in free_services  -> $0
-      subscription you already have           -> $0
-      subscription you don't have             -> its monthly price
-      rent / buy                              -> your configured estimate
-    TMDB doesn't expose actual rental prices, so rent/buy use flat estimates.
+    Ranking is strictly by tier, then within a tier:
+      1. Free: the services in free_services (Tubi, Pluto TV, Plex, The Roku Channel by default)
+      2. Subscription: services you pay for first, then other subscriptions, cheapest first
+      3. Rent (pay per view: Apple TV, Amazon Video, Google Play Movies, ...)
+      4. Buy
     """
-    offers: dict[tuple[str, str], Offer] = {}
+    offers: dict[tuple[str, int], Offer] = {}
     for kind in ("free", "ads", "flatrate", "rent", "buy"):
         for p in region_providers.get(kind) or []:
             name = p.get("provider_name") or "Unknown"
             key = canonical_provider(name)
             if kind == "flatrate" and key == "apple tv":
                 key = "apple tv plus"  # Apple renamed TV+ to "Apple TV"; the store never offers flatrate
-            subscribed = False
-            if kind in ("free", "ads") or key in prefs.free_services:
-                cost, label = 0.0, KIND_LABEL[kind] if kind != "flatrate" else "Free"
-            elif kind == "flatrate":
-                if key in prefs.my_services:
-                    subscribed = True
-                    cost, label = 0.0, "Your subscription"
-                else:
-                    price = prefs.prices.get(key, prefs.unknown_subscription_price)
-                    known = key in prefs.prices
-                    cost, label = price, f"Subscription ~${price:.2f}/mo" + ("" if known else " (price unknown)")
-            elif kind == "rent":
-                cost, label = prefs.rental_estimate, "Rent"
-            else:
-                cost, label = prefs.purchase_estimate, "Buy"
-            offer = Offer(
-                provider=name, key=key, kind=kind, cost=cost, cost_label=label,
-                subscribed=subscribed, priority=_priority(p),
-            )
-            # Collapse variants of the same service ("Max" and "Max Amazon Channel"): keep the cheaper/better one.
-            dedupe = (key, "stream" if offer.is_streaming else kind)
+            offer = _make_offer(name, key, kind, prefs, _priority(p))
+            if offer is None:
+                continue
+            # Collapse variants of the same service ("Max" and "Max Amazon Channel"): keep the better one.
+            dedupe = (key, offer.tier)
             prev = offers.get(dedupe)
             if prev is None or _sort_key(offer) < _sort_key(prev):
                 offers[dedupe] = offer
     return sorted(offers.values(), key=_sort_key)
+
+
+def _make_offer(name: str, key: str, kind: str, prefs: Prefs, priority: int) -> Offer | None:
+    if kind in ("rent", "buy"):
+        tier = RENT if kind == "rent" else BUY
+        return Offer(name, key, kind, tier, 0.0, KIND_LABEL[kind], priority=priority)
+    if key in prefs.free_services:
+        label = "Free with ads" if kind == "ads" else "Free"
+        return Offer(name, key, kind, FREE, 0.0, label, priority=priority)
+    if kind in ("free", "ads"):
+        # TMDB calls it free but it isn't one of your free services: either an ad tier of a paid
+        # service ("Amazon Prime Video with Ads") or a free service you've chosen not to count.
+        if key not in prefs.prices and key not in prefs.my_services:
+            return None if not prefs.count_other_free else Offer(
+                name, key, kind, FREE, 0.0, KIND_LABEL[kind], priority=priority)
+        kind = "flatrate"
+    if key in prefs.my_services:
+        return Offer(name, key, kind, SUBSCRIPTION, 0.0, "Your subscription", subscribed=True, priority=priority)
+    price = prefs.prices.get(key, prefs.unknown_subscription_price)
+    label = f"Subscription ~${price:.2f}/mo" + ("" if key in prefs.prices else " (price unknown)")
+    return Offer(name, key, kind, SUBSCRIPTION, price, label, priority=priority)
 
 
 def _priority(p: dict) -> int:
@@ -65,7 +69,7 @@ def _priority(p: dict) -> int:
 
 
 def _sort_key(o: Offer):
-    return (o.cost, KIND_RANK[o.kind], not o.subscribed, o.priority, o.provider)
+    return (o.tier, not o.subscribed, o.cost, o.priority, o.provider)
 
 
 def _parse_date(s: str | None) -> date | None:

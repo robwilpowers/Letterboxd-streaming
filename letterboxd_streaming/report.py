@@ -15,7 +15,7 @@ SECTIONS = [
     ("free", "Watch free"),
     ("mine", "On your services"),
     ("subscription", "Needs a subscription you don't have"),
-    ("rent", "Cheapest to rent or buy"),
+    ("rent", "Pay per view (rent or buy)"),
     ("in_theaters", "In theaters"),
     ("unreleased", "Not released yet"),
     ("not_available", "Released, but nowhere to watch"),
@@ -27,11 +27,11 @@ def section_of(r: Result) -> str:
     if r.status != Status.AVAILABLE:
         return r.status.value
     best = r.best
-    if best.cost == 0 and best.subscribed:
-        return "mine"
-    if best.cost == 0:
+    if best.tier == 0:
         return "free"
-    if best.kind == "flatrate":
+    if best.subscribed:
+        return "mine"
+    if best.tier == 1:
         return "subscription"
     return "rent"
 
@@ -49,14 +49,15 @@ def group(results: list[Result]) -> dict[str, list[Result]]:
 
 
 def subscription_value(results: list[Result], prefs: Prefs) -> list[tuple[str, float, int, list[str]]]:
-    """For services you don't have: how many watchlist films would they unlock that you can't already watch free?"""
+    """For services you don't have: how many watchlist films would they unlock that you can't already watch free
+    or on a service you pay for?"""
     unlock: dict[str, list[str]] = defaultdict(list)
     names: dict[str, str] = {}
     for r in results:
-        if r.status != Status.AVAILABLE or (r.best and r.best.cost == 0):
+        if r.status != Status.AVAILABLE or r.best.tier == 0 or r.best.subscribed:
             continue
         for o in r.offers:
-            if o.kind == "flatrate" and not o.subscribed:
+            if o.tier == 1 and not o.subscribed:
                 unlock[o.key].append(r.film.label)
                 names.setdefault(o.key, o.provider)
     rows = []
@@ -70,7 +71,7 @@ def subscription_value(results: list[Result], prefs: Prefs) -> list[tuple[str, f
 def _alts(r: Result, limit: int = 4) -> str:
     alts = r.offers[1:]
     if any(o.kind != "buy" for o in r.offers):
-        alts = [o for o in alts if o.kind != "buy"]  # buying is only worth listing when it's the sole option
+        alts = [o for o in alts if o.kind != "buy"]  # buying is only worth listing when it's the only option
     out = [f"{o.provider} ({o.cost_label.lower()})" for o in alts]
     return ", ".join(out[:limit]) + (" ..." if len(out) > limit else "")
 
@@ -105,7 +106,7 @@ def render_text(results: list[Result], prefs: Prefs) -> str:
 
     value = subscription_value(results, prefs)
     if value:
-        lines.append("SUBSCRIPTIONS WORTH CONSIDERING (films you can't already watch free)")
+        lines.append("SUBSCRIPTIONS WORTH CONSIDERING (films you can't already watch free or on your services)")
         for name, price, count, _ in value[:8]:
             lines.append(f"  {name}: {count} film(s) for ~${price:.2f}/mo (~${price / count:.2f} per film)")
         lines.append("")
@@ -149,7 +150,7 @@ def render_html(results: list[Result], prefs: Prefs) -> str:
             if r.film.slug:
                 film = f'<a href="https://letterboxd.com/film/{e(r.film.slug)}/">{film}</a>'
             if r.best:
-                body = f'<div class="best"><b>{e(r.best.provider)}</b> <span class="tag {e(r.best.kind)}">{e(r.best.cost_label)}</span></div>'
+                body = f'<div class="best"><b>{e(r.best.provider)}</b> <span class="tag t{r.best.tier}">{e(r.best.cost_label)}</span></div>'
                 alts = _alts(r, limit=6)
                 if alts:
                     body += f'<div class="alts">Also: {e(alts)}</div>'
@@ -172,7 +173,7 @@ def render_html(results: list[Result], prefs: Prefs) -> str:
         )
         parts.append(
             '<section id="value"><h2>Subscriptions worth considering</h2>'
-            "<p>Services you don't have, ranked by how many watchlist films they'd unlock that you can't already watch free.</p>"
+            "<p>Services you don't have, ranked by how many watchlist films they'd unlock that you can't already watch free or on a service you pay for.</p>"
             "<table><thead><tr><th>Service</th><th>Films</th><th>~Monthly</th><th>~Per film</th><th>Includes</th></tr></thead>"
             f"<tbody>{rows}</tbody></table></section>"
         )
@@ -208,7 +209,7 @@ ul {{ padding:0; }} .grid {{ list-style:none; display:grid; grid-template-column
 .card {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; }}
 .title {{ font-weight:600; margin-bottom:6px; }} .title a {{ color:var(--fg); text-decoration:none; }}
 .tag {{ font-size:12px; border-radius:4px; padding:1px 6px; border:1px solid currentColor; white-space:nowrap; }}
-.tag.free,.tag.ads {{ color:var(--free); }} .tag.flatrate {{ color:var(--sub); }} .tag.rent,.tag.buy {{ color:var(--rent); }}
+.tag.t0 {{ color:var(--free); }} .tag.t1 {{ color:var(--sub); }} .tag.t2,.tag.t3 {{ color:var(--rent); }}
 .alts,.note,.src {{ color:var(--muted); font-size:13px; margin-top:4px; }}
 .chg {{ color:var(--chg); font-size:13px; margin-top:4px; }}
 .changes {{ border-left:3px solid var(--chg); padding-left:12px; }} .changes li {{ list-style:none; margin:4px 0; }}
@@ -222,6 +223,6 @@ footer {{ color:var(--muted); font-size:12px; margin-top:40px; }}
 <nav>{nav}</nav>
 {body}
 <footer>Availability data from JustWatch via TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
-Subscription and rental prices are estimates from config.toml. Availability changes often &mdash; re-run to refresh.</footer>
+Subscription prices are estimates from config.toml. Availability changes often &mdash; re-run to refresh.</footer>
 </main></body></html>
 """

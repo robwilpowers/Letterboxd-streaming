@@ -41,14 +41,15 @@ class Offer:
     provider: str          # display name as TMDB/JustWatch reports it
     key: str               # canonical provider key used for matching and prices
     kind: str              # free | ads | flatrate | rent | buy
-    cost: float            # estimated marginal cost to watch this one film
+    tier: int              # 0 free, 1 subscription, 2 rent, 3 buy -- ranking is by tier first
+    cost: float            # monthly price for a subscription you don't have, else 0
     cost_label: str
     subscribed: bool = False
     priority: int = 999    # JustWatch display priority, used as a tie-breaker
 
     @property
     def is_streaming(self) -> bool:
-        return self.kind in ("free", "ads", "flatrate")
+        return self.tier <= 1  # free or subscription, i.e. not pay-per-view
 
 
 @dataclass
