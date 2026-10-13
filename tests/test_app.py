@@ -217,6 +217,43 @@ class TitleMatching(unittest.TestCase):
         self.assertIsNone(pick_match(Film("Heat", 1995), [{"id": 9, "title": "Hot", "release_date": "2013-01-01"}]))
 
 
+class SubscriptionBreakdown(unittest.TestCase):
+    def setUp(self):
+        self.prefs = Prefs(my_services={"netflix"})
+        def film(title, **providers):
+            f = Film(title, 2020, tmdb_id=hash(title) % 10000)
+            return analyze.classify(f, details(providers, us(("2020-01-01", 3))), self.prefs, today=TODAY)
+        self.results = [
+            film("A", flatrate=[prov("Peacock"), prov("Max")]),
+            film("B", flatrate=[prov("Peacock")]),
+            film("C", flatrate=[prov("Max")], rent=[prov("Apple TV")]),
+            film("D", flatrate=[prov("Peacock"), prov("Netflix")]),  # on your service: not counted
+            film("E", ads=[prov("Tubi TV")], flatrate=[prov("Peacock")]),  # free: not counted
+            film("F", rent=[prov("Apple TV")]),
+        ]
+
+    def test_counts_and_exclusives(self):
+        value = report.subscription_value(self.results, self.prefs)
+        got = [(v.name, v.count, v.only_here) for v in value]
+        # Peacock and Max both unlock 2; tie broken by exclusives, then price, then name.
+        self.assertEqual(got, [("Max", 2, 1), ("Peacock", 2, 1)])
+
+    def test_text_shows_breakdown_and_filters(self):
+        text = report.render_text(self.results, self.prefs)
+        self.assertIn("Max: 2 film(s), 1 only here", text)
+        filtered = report.render_text(self.results, self.prefs, service="peacock")
+        section = filtered.split("NEEDS A SUBSCRIPTION")[1].split("\n\n")[1]
+        self.assertIn("A (2020)", section)
+        self.assertIn("B (2020)", section)
+        self.assertNotIn("C (2020)", section)
+
+    def test_html_has_filter_chips(self):
+        page = report.render_html(self.results, self.prefs)
+        self.assertIn('data-k="peacock"', page)
+        self.assertIn('data-svc="hbo max|peacock"', page)
+        self.assertNotIn("\\'", page)
+
+
 class EndToEnd(unittest.TestCase):
     def test_check_film_records_history_and_reports_switch(self):
         with tempfile.TemporaryDirectory() as tmp:

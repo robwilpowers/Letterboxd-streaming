@@ -45,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--refresh", action="store_true", help="Ignore cached availability and re-fetch everything")
     ap.add_argument("--html", metavar="PATH", help="Also write an HTML report")
     ap.add_argument("--json", metavar="PATH", help="Also write results as JSON")
+    ap.add_argument("--service", metavar="NAME",
+                    help='Only list films on this service in the "needs a subscription" section, e.g. --service Peacock')
     ap.add_argument("--limit", type=int, help="Only check the first N films (useful for a quick test)")
     ap.add_argument("--workers", type=int, default=6, help="Parallel requests (default 6)")
     args = ap.parse_args(argv)
@@ -81,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         results = list(pool.map(run, films))
 
-    print(report.render_text(results, prefs))
+    print(report.render_text(results, prefs, service=args.service))
     if args.html:
         Path(args.html).write_text(report.render_html(results, prefs), encoding="utf-8")
         print(f"\nWrote {args.html}", file=sys.stderr)

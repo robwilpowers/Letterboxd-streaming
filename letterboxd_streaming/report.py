@@ -5,11 +5,11 @@ from __future__ import annotations
 import html
 import json
 from collections import defaultdict
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import date
 
-from .config import Prefs
-from .models import Result, Status
+from .config import Prefs, canonical_provider
+from .models import Offer, Result, Status
 
 SECTIONS = [
     ("free", "Watch free"),
@@ -48,24 +48,42 @@ def group(results: list[Result]) -> dict[str, list[Result]]:
     return groups
 
 
-def subscription_value(results: list[Result], prefs: Prefs) -> list[tuple[str, float, int, list[str]]]:
-    """For services you don't have: how many watchlist films would they unlock that you can't already watch free
-    or on a service you pay for?"""
-    unlock: dict[str, list[str]] = defaultdict(list)
-    names: dict[str, str] = {}
+@dataclass
+class ServiceValue:
+    key: str
+    name: str
+    price: float
+    films: list[str]   # films this service would unlock
+    only_here: int     # of those, films no other subscription you lack carries
+
+    @property
+    def count(self) -> int:
+        return len(self.films)
+
+
+def _unowned_subs(r: Result) -> list[Offer]:
+    return [o for o in r.offers if o.tier == 1 and not o.subscribed]
+
+
+def subscription_value(results: list[Result], prefs: Prefs) -> list[ServiceValue]:
+    """For services you don't have: how many watchlist films would each unlock that you can't already
+    watch free or on a service you pay for? Sorted by most films, then most exclusives, then cheapest."""
+    rows: dict[str, ServiceValue] = {}
     for r in results:
-        if r.status != Status.AVAILABLE or r.best.tier == 0 or r.best.subscribed:
+        if section_of(r) != "subscription":
             continue
-        for o in r.offers:
-            if o.tier == 1 and not o.subscribed:
-                unlock[o.key].append(r.film.label)
-                names.setdefault(o.key, o.provider)
-    rows = []
-    for key, films in unlock.items():
-        price = prefs.prices.get(key, prefs.unknown_subscription_price)
-        rows.append((names[key], price, len(films), sorted(films)))
-    rows.sort(key=lambda row: (-row[2], row[1]))
-    return rows
+        subs = _unowned_subs(r)
+        for o in subs:
+            row = rows.get(o.key)
+            if row is None:
+                price = prefs.prices.get(o.key, prefs.unknown_subscription_price)
+                row = rows[o.key] = ServiceValue(o.key, o.provider, price, [], 0)
+            row.films.append(r.film.label)
+            if len(subs) == 1:
+                row.only_here += 1
+    for row in rows.values():
+        row.films.sort(key=str.lower)
+    return sorted(rows.values(), key=lambda v: (-v.count, -v.only_here, v.price, v.name))
 
 
 def _alts(r: Result, limit: int = 4) -> str:
@@ -76,8 +94,16 @@ def _alts(r: Result, limit: int = 4) -> str:
     return ", ".join(out[:limit]) + (" ..." if len(out) > limit else "")
 
 
-def render_text(results: list[Result], prefs: Prefs) -> str:
+def _value_line(v: ServiceValue) -> str:
+    only = f", {v.only_here} only here" if v.only_here else ""
+    return f"{v.name}: {v.count} film(s){only} - ~${v.price:.2f}/mo"
+
+
+def render_text(results: list[Result], prefs: Prefs, service: str | None = None) -> str:
+    """service: only list films in the subscription section that this service carries."""
     groups = group(results)
+    value = subscription_value(results, prefs)
+    service_key = canonical_provider(service) if service else None
     lines = [f"Letterboxd watchlist availability ({prefs.region}) - {date.today().isoformat()}", ""]
 
     changed = [r for r in results if r.changes]
@@ -92,7 +118,20 @@ def render_text(results: list[Result], prefs: Prefs) -> str:
         items = groups.get(key)
         if not items:
             continue
-        lines.append(f"{title.upper()} ({len(items)})")
+        heading = f"{title.upper()} ({len(items)})"
+        if key == "subscription":
+            if service_key:
+                items = [r for r in items if any(o.key == service_key for o in _unowned_subs(r))]
+                heading += f" - showing {len(items)} on {service}"
+            lines.append(heading)
+            lines.append("  By service (films it would unlock):")
+            for v in value:
+                lines.append(f"    {_value_line(v)}")
+            lines.append("")
+        else:
+            lines.append(heading)
+        if key == "subscription" and service_key and not items:
+            lines.append(f"  (none of these films are on {service})")
         for r in items:
             if r.best:
                 line = f"  {r.film.label} -> {r.best.provider} [{r.best.cost_label}]"
@@ -102,13 +141,6 @@ def render_text(results: list[Result], prefs: Prefs) -> str:
             else:
                 line = f"  {r.film.label}" + (f" - {r.note}" if r.note else "")
             lines.append(line)
-        lines.append("")
-
-    value = subscription_value(results, prefs)
-    if value:
-        lines.append("SUBSCRIPTIONS WORTH CONSIDERING (films you can't already watch free or on your services)")
-        for name, price, count, _ in value[:8]:
-            lines.append(f"  {name}: {count} film(s) for ~${price:.2f}/mo (~${price / count:.2f} per film)")
         lines.append("")
 
     lines.append("Availability data: JustWatch via TMDB. Prices are estimates; edit them in config.toml.")
@@ -138,6 +170,7 @@ def render_html(results: list[Result], prefs: Prefs) -> str:
         )
         parts.append(f'<section class="changes"><h2>Changes since last run</h2><ul>{items}</ul></section>')
 
+    value = subscription_value(results, prefs)
     nav = []
     for key, title in SECTIONS:
         items = groups.get(key)
@@ -149,7 +182,16 @@ def render_html(results: list[Result], prefs: Prefs) -> str:
             film = e(r.film.label)
             if r.film.slug:
                 film = f'<a href="https://letterboxd.com/film/{e(r.film.slug)}/">{film}</a>'
-            if r.best:
+            attrs = ""
+            if key == "subscription":
+                subs = _unowned_subs(r)
+                attrs = f' data-svc="{e("|".join(o.key for o in subs))}"'
+                pills = "".join(f'<span class="svc" data-k="{e(o.key)}">{e(o.provider)}</span>' for o in subs)
+                rent = [o.provider for o in r.offers if o.kind == "rent"]
+                body = f'<div class="svcs">{pills}</div>'
+                if rent:
+                    body += f'<div class="alts">Or rent: {e(", ".join(rent[:4]))}</div>'
+            elif r.best:
                 body = f'<div class="best"><b>{e(r.best.provider)}</b> <span class="tag t{r.best.tier}">{e(r.best.cost_label)}</span></div>'
                 alts = _alts(r, limit=6)
                 if alts:
@@ -162,21 +204,21 @@ def render_html(results: list[Result], prefs: Prefs) -> str:
                 body += f'<div class="chg">{e("; ".join(r.changes))}</div>'
             if r.link:
                 body += f'<div class="src"><a href="{e(r.link)}">All options</a></div>'
-            cards.append(f'<li class="card"><div class="title">{film}</div>{body}</li>')
-        parts.append(f'<section id="{key}"><h2>{e(title)} <span>{len(items)}</span></h2><ul class="grid">{"".join(cards)}</ul></section>')
-
-    value = subscription_value(results, prefs)
-    if value:
-        rows = "".join(
-            f"<tr><td>{e(n)}</td><td>{c}</td><td>${p:.2f}</td><td>${p / c:.2f}</td><td>{e(', '.join(f[:6]))}{' ...' if len(f) > 6 else ''}</td></tr>"
-            for n, p, c, f in value[:10]
-        )
-        parts.append(
-            '<section id="value"><h2>Subscriptions worth considering</h2>'
-            "<p>Services you don't have, ranked by how many watchlist films they'd unlock that you can't already watch free or on a service you pay for.</p>"
-            "<table><thead><tr><th>Service</th><th>Films</th><th>~Monthly</th><th>~Per film</th><th>Includes</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table></section>"
-        )
+            cards.append(f'<li class="card"{attrs}><div class="title">{film}</div>{body}</li>')
+        intro = ""
+        if key == "subscription" and value:
+            chips = [f'<button class="chip on" data-k="">All <span>{len(items)}</span></button>']
+            for v in value:
+                only = f" &middot; {v.only_here} only here" if v.only_here else ""
+                chips.append(
+                    f'<button class="chip" data-k="{e(v.key)}">{e(v.name)} <span>{v.count}{only} &middot; ~${v.price:.2f}/mo</span></button>'
+                )
+            intro = (
+                '<p class="hint">Films each service would unlock that you can&rsquo;t already watch free or on a service you pay for. '
+                '"Only here" means no other subscription carries it. Click a service to filter.</p>'
+                f'<div class="chips">{"".join(chips)}</div>'
+            )
+        parts.append(f'<section id="{key}"><h2>{e(title)} <span>{len(items)}</span></h2>{intro}<ul class="grid">{"".join(cards)}</ul></section>')
 
     return HTML_TEMPLATE.format(
         region=e(prefs.region),
@@ -213,10 +255,16 @@ ul {{ padding:0; }} .grid {{ list-style:none; display:grid; grid-template-column
 .alts,.note,.src {{ color:var(--muted); font-size:13px; margin-top:4px; }}
 .chg {{ color:var(--chg); font-size:13px; margin-top:4px; }}
 .changes {{ border-left:3px solid var(--chg); padding-left:12px; }} .changes li {{ list-style:none; margin:4px 0; }}
-table {{ border-collapse:collapse; width:100%; font-size:14px; display:block; overflow-x:auto; }}
-th,td {{ text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }}
-td:nth-child(2),td:nth-child(3),td:nth-child(4) {{ font-variant-numeric:tabular-nums; white-space:nowrap; }}
 footer {{ color:var(--muted); font-size:12px; margin-top:40px; }}
+.hint {{ color:var(--muted); font-size:13px; margin:0 0 10px; }}
+.chips {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }}
+.chip {{ font:inherit; font-size:13px; cursor:pointer; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 12px; }}
+.chip span {{ color:var(--muted); }}
+.chip.on {{ border-color:var(--sub); color:var(--sub); box-shadow:inset 0 0 0 1px var(--sub); }}
+.svcs {{ display:flex; flex-wrap:wrap; gap:6px; }}
+.svc {{ font-size:12px; border:1px solid var(--line); border-radius:4px; padding:1px 6px; }}
+.svc.on {{ color:var(--sub); border-color:var(--sub); font-weight:600; }}
+.card[hidden] {{ display:none; }}
 </style></head><body><main>
 <h1>Where to watch your watchlist</h1>
 <p class="meta">{total} films &middot; region {region} &middot; checked {today}</p>
@@ -224,5 +272,18 @@ footer {{ color:var(--muted); font-size:12px; margin-top:40px; }}
 {body}
 <footer>Availability data from JustWatch via TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
 Subscription prices are estimates from config.toml. Availability changes often &mdash; re-run to refresh.</footer>
-</main></body></html>
+</main>
+<script>
+document.querySelectorAll("#subscription .chip").forEach(function (chip) {{
+  chip.addEventListener("click", function () {{
+    var k = chip.dataset.k;
+    document.querySelectorAll("#subscription .chip").forEach(function (c) {{ c.classList.toggle("on", c === chip); }});
+    document.querySelectorAll("#subscription .card").forEach(function (card) {{
+      card.hidden = !!k && card.dataset.svc.split("|").indexOf(k) < 0;
+    }});
+    document.querySelectorAll("#subscription .svc").forEach(function (p) {{ p.classList.toggle("on", !!k && p.dataset.k === k); }});
+  }});
+}});
+</script>
+</body></html>
 """

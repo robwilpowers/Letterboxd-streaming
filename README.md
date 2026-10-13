@@ -13,6 +13,18 @@ WATCH FREE (1)
 ON YOUR SERVICES (1)
   Old Thing (2019) -> Netflix [Your subscription]
 
+NEEDS A SUBSCRIPTION YOU DON'T HAVE (5)
+  By service (films it would unlock):
+    Max: 4 film(s), 2 only here - ~$10.99/mo
+    Peacock: 2 film(s), 1 only here - ~$10.99/mo
+    Criterion Channel: 1 film(s) - ~$10.99/mo
+
+  Barbie (2023) -> Max [Subscription ~$10.99/mo]
+  Oppenheimer (2023) -> Peacock [Subscription ~$10.99/mo]
+  Stalker (1979) -> Criterion Channel [Subscription ~$10.99/mo]
+      also: Max (subscription ~$10.99/mo)
+  ...
+
 PAY PER VIEW (RENT OR BUY) (1)
   Dune: Part Two (2024) -> Apple TV [Rent]
       also: Amazon Video (rent)
@@ -23,8 +35,6 @@ IN THEATERS (1)
 NOT RELEASED YET (1)
   Untitled Project (2026) - Expected release 2026-12-18
 
-SUBSCRIPTIONS WORTH CONSIDERING (films you can't already watch free)
-  Peacock: 4 film(s) for ~$10.99/mo (~$2.75 per film)
 ```
 
 ## Setup
@@ -39,6 +49,7 @@ Requires Python 3.11+. It has no third-party dependencies.
 python -m letterboxd_streaming                       # uses config.toml
 python -m letterboxd_streaming --user yourname --html report.html
 python -m letterboxd_streaming --csv watchlist.csv   # from a Letterboxd data export
+python -m letterboxd_streaming --service Peacock     # only Peacock films in the "needs a subscription" section
 ```
 
 If you prefer, `pip install .` installs it as a `letterboxd-streaming` command.
@@ -59,7 +70,9 @@ If you prefer, `pip install .` installs it as a `letterboxd-streaming` command.
 | 3. Rent (pay per view) | Apple TV, Amazon Video, Google Play Movies, etc. | JustWatch's display order |
 | 4. Buy | same stores | shown only when there's nothing else |
 
-The best option is listed first and the others appear under "also". The **Subscriptions worth considering** section counts how many watchlist films each service you don't have would unlock that you can't already watch free or on a service you pay for.
+The best option is listed first and the others appear under "also".
+
+**Which subscription to get next:** the "Needs a subscription you don't have" section starts with a breakdown by service. For each one it shows how many of those films it would unlock, and how many are **only here**, meaning no other subscription you lack carries them. Services are sorted by films unlocked, then by exclusives, then by price. A service with fewer films but more exclusives can be the better pick, because the others may be reachable through a different service. In the HTML report, click a service to show only its films. In the terminal, use `--service NAME`.
 
 TMDB sometimes marks other services as free (YouTube's free movies, Crackle, Hoopla). By default they're left out because they aren't in your free list. Set `count_other_free = true` to count them. Ad-supported tiers of paid services ("Amazon Prime Video with Ads") count as that subscription, not as free.
 
